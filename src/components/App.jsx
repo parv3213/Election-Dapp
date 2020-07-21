@@ -1,20 +1,29 @@
 import React, { useState, useEffect } from "react";
 import Web3 from "web3";
 import Election from "../abis/Election.json";
+import Header from "./Header";
+import Body from "./Body";
 
 export default function App() {
 	let content;
 	const [account, setAccount] = useState("");
 	const [electionContract, setElectionContract] = useState("");
+	const [candidate1Votes, setCandidate1Votes] = useState();
+	const [candidate2Votes, setCandidate2Votes] = useState();
+	const [winner, setWinner] = useState("");
 	const [loading, setLoading] = useState(true);
+	const [reload, setReload] = useState(true);
 
 	useEffect(() => {
-		loadBlockchainData();
-	}, []);
+		loadWeb3().then((possible) => {
+			if (possible) loadBlockchainData();
+		});
+	}, [reload]);
 
 	const loadBlockchainData = async () => {
-		const possible = await loadWeb3();
-		if (!possible) return;
+		// const possible = await loadWeb3();
+		// if (!possible) return window.alert("App will not load");
+		console.log("Fields Updated!");
 		const web3 = window.web3;
 		const _accounts = await web3.eth.getAccounts();
 		setAccount(_accounts[0]);
@@ -23,6 +32,15 @@ export default function App() {
 		if (_electionData) {
 			const _electionContract = new web3.eth.Contract(Election.abi, _electionData.address);
 			setElectionContract(_electionContract);
+			const _candidate1 = await _electionContract.methods.candidates(1).call();
+			const _candidate1Votes = Number(_candidate1.voteCount);
+			setCandidate1Votes(_candidate1Votes);
+			const _candidate2 = await _electionContract.methods.candidates(2).call();
+			const _candidate2Votes = Number(_candidate2.voteCount);
+			setCandidate2Votes(_candidate2Votes);
+			if (_candidate1Votes > _candidate2Votes) setWinner("Candidate 1");
+			else if (_candidate1Votes < _candidate2Votes) setWinner("Candidate 2");
+			else setWinner("No one");
 		} else {
 			return window.alert("Token network not detected!\nApp will not load");
 		}
@@ -53,11 +71,37 @@ export default function App() {
 		return 1;
 	};
 
+	const castVote = async (candidate) => {
+		setLoading(true);
+		await electionContract.methods
+			.vote(candidate)
+			.send({ from: account })
+			.on("transactionHash", (hash) => {
+				console.log("Transaction Successful", hash);
+				setReload(!reload);
+			});
+
+		// setLoading(false)
+	};
+
 	if (!loading) {
-		content = <p>Hey</p>;
+		content = (
+			<Body
+				account={account}
+				castVote={castVote}
+				winner={winner}
+				candidate1Votes={candidate1Votes}
+				candidate2Votes={candidate2Votes}
+			/>
+		);
 	} else {
-		content = <p>Loading...</p>;
+		content = <p className="text-center my-4">Loading...</p>;
 	}
 
-	return <div>{content}</div>;
+	return (
+		<div>
+			<Header />
+			{content}
+		</div>
+	);
 }
